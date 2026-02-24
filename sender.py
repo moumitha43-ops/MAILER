@@ -137,7 +137,7 @@ def send_all(matches: list, template_html: str = None,
     smtp_user    = os.getenv("SMTP_USERNAME")      # Elastic login email
     app_password    = os.getenv("SMTP_PASSWORD") 
     
-    if not all([smtp_server, smtp_port, sender_email, smtp_user, smtp_pass]):
+    if not all([smtp_server, smtp_port, sender_email, smtp_user, app_password]):
      raise ValueError("SMTP environment variables are missing in Railway.")
 
      # API KEY
