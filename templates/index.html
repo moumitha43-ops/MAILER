@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Birthday Wishes Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0d0d0f;
+  --surface:  #16161a;
+  --surface2: #1e1e24;
+  --border:   #2a2a34;
+  --accent:   #f97316;
+  --accent2:  #fbbf24;
+  --text:     #f0eff4;
+  --muted:    #8885a0;
+  --green:    #22c55e;
+  --red:      #f87171;
+  --blue:     #60a5fa;
+  --radius:   14px;
+  --sidebar:  220px;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 10;
+}
+.sidebar-logo {
+  padding: 0 20px 28px;
+  font-family: 'Syne', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.sidebar-logo span { color: var(--accent); }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(249,115,22,0.08); }
+.nav-icon { font-size: 17px; width: 22px; text-align: center; }
+
+/* ── Main ── */
+.main {
+  margin-left: var(--sidebar);
+  flex: 1;
+  padding: 32px;
+  max-width: calc(100% - var(--sidebar));
+}
+
+/* ── Page sections (shown/hidden) ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Header strip ── */
+.page-header { margin-bottom: 28px; }
+.page-header h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.page-header p { color: var(--muted); font-size: 14px; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Stat grid ── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.stat-val { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; color: var(--accent); }
+.stat-lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+/* ── Buttons ── */
+.btn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--accent); color: #000; font-weight: 700; }
+.btn-primary:hover { background: #ea6c0a; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border-bottom: 1px solid var(--border); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.badge-green { background: #0f2a0f; color: var(--green); border: 1px solid #1e3e1e; }
+.badge-red   { background: #2a0f0f; color: var(--red);   border: 1px solid #3e1e1e; }
+.badge-blue  { background: #0f1e2a; color: var(--blue);  border: 1px solid #1e2e3e; }
+.badge-gray  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+/* ── Drop zone ── */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--muted);
+}
+.dropzone:hover, .dropzone.drag-over { border-color: var(--accent); color: var(--text); background: rgba(249,115,22,0.05); }
+.dropzone .dz-icon { font-size: 36px; margin-bottom: 10px; }
+.dropzone p { font-size: 14px; }
+.dropzone small { font-size: 12px; color: var(--muted); margin-top: 6px; display: block; }
+
+/* ── Form ── */
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--muted); }
+.form-group input, .form-group select {
+  width: 100%;
+  max-width: 400px;
+  padding: 9px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+.form-group input:focus, .form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+.toggle-row { display: flex; align-items: center; gap: 12px; }
+.toggle {
+  width: 42px; height: 24px;
+  background: var(--border);
+  border-radius: 100px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--green); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle.on::after { transform: translateX(18px); }
+
+/* ── Progress bar ── */
+.progress-bar { height: 6px; background: var(--surface2); border-radius: 100px; overflow: hidden; margin-top: 10px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 100px; transition: width 0.4s ease; width: 0%; }
+
+/* ── Log viewer ── */
+.log-viewer {
+  background: #0a0a0c;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  height: 320px;
+  overflow-y: auto;
+  color: #a0a0b0;
+}
+.log-viewer .log-sent   { color: var(--green); }
+.log-viewer .log-err    { color: var(--red); }
+.log-viewer .log-warn   { color: var(--accent2); }
+.log-viewer .log-info   { color: var(--blue); }
+
+/* ── Toast ── */
+#toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  display: none;
+  z-index: 999;
+  animation: slideUp 0.3s ease;
+}
+#toast.show { display: block; }
+#toast.success { background: #0f2a0f; color: var(--green); border: 1px solid #1e3e1e; }
+#toast.error   { background: #2a0f0f; color: var(--red);   border: 1px solid #3e1e1e; }
+#toast.info    { background: #0f1e2a; color: var(--blue);  border: 1px solid #1e2e3e; }
+@keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── Mobile ── */
+@media (max-width: 700px) {
+  .sidebar { width: 56px; }
+  .sidebar-logo, .nav-item span { display: none; }
+  .main { margin-left: 56px; max-width: calc(100% - 56px); padding: 20px 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">🎂 Birthday<span>Wishes</span></div>
+  <a class="nav-item active" onclick="showPage('dashboard')" href="#">
+    <span class="nav-icon">🏠</span><span>Dashboard</span>
+  </a>
+  <a class="nav-item" onclick="showPage('csv')" href="#">
+    <span class="nav-icon">📋</span><span>CSV Manager</span>
+  </a>
+  <a class="nav-item" onclick="showPage('template')" href="#">
+    <span class="nav-icon">🎨</span><span>Card Template</span>
+  </a>
+  <a class="nav-item" onclick="showPage('scheduler')" href="#">
+    <span class="nav-icon">⏰</span><span>Scheduler</span>
+  </a>
+  <a class="nav-item" onclick="showPage('settings')" href="#">
+    <span class="nav-icon">⚙️</span><span>Settings</span>
+  </a>
+  <a class="nav-item" onclick="showPage('logs')" href="#">
+    <span class="nav-icon">📜</span><span>Logs</span>
+  </a>
+</nav>
+
+<!-- Main content -->
+<main class="main">
+
+  <!-- ── DASHBOARD ── -->
+  <div id="page-dashboard" class="page active">
+    <div class="page-header">
+      <h1>Today's Birthdays 🎉</h1>
+      <p id="dashboard-date">Loading…</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-val" id="stat-matches">—</div><div class="stat-lbl">Matches Today</div></div>
+      <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">Total in CSV</div></div>
+      <div class="stat"><div class="stat-val" id="stat-skipped">—</div><div class="stat-lbl">Skipped Rows</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎂 Birthday Matches</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Roll No.</th></tr></thead>
+          <tbody id="matches-tbody"><tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-send" onclick="sendEmails()">Send Birthday Wishes</button>
+        <button class="btn btn-secondary" onclick="loadDashboard()">Refresh</button>
+      </div>
+      <div id="send-progress" style="display:none;margin-top:16px;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px;" id="send-progress-text">Sending…</div>
+        <div class="progress-bar"><div class="progress-fill" id="send-progress-bar"></div></div>
+      </div>
+    </div>
+
+    <!-- Skipped rows card -->
+    <div class="card" id="skipped-card" style="display:none;">
+      <div class="card-title">⚠️ Skipped Rows</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Reason</th></tr></thead>
+          <tbody id="skipped-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CSV MANAGER ── -->
+  <div id="page-csv" class="page">
+    <div class="page-header">
+      <h1>CSV Manager</h1>
+      <p>Upload your student/staff data file. Required columns: name, email, dob, rollnumber</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📤 Upload CSV</div>
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('csv-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <div class="dz-icon">📄</div>
+        <p>Click to upload or drag & drop your CSV here</p>
+        <small>Max 5 MB · Columns: name, email, dob, rollnumber</small>
+      </div>
+      <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="uploadCSV(this.files[0])">
+    </div>
+
+    <div class="card" id="validation-card" style="display:none;">
+      <div class="card-title">✅ Validation Results</div>
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-val" id="csv-valid-count" style="color:var(--green)">—</div><div class="stat-lbl">Valid Rows</div></div>
+        <div class="stat"><div class="stat-val" id="csv-error-count" style="color:var(--red)">—</div><div class="stat-lbl">Error Rows</div></div>
+      </div>
+      <div class="table-wrap" id="csv-preview-wrap"></div>
+    </div>
+  </div>
+
+  <!-- ── TEMPLATE ── -->
+  <div id="page-template" class="page">
+    <div class="page-header">
+      <h1>Card Template</h1>
+      <p>Customise the birthday card HTML. Use <code style="color:var(--accent)">{{name}}</code> where the recipient's name should appear.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🖼️ Upload Images (Logo / Signature / Photo)</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Upload images to get base64 data URIs you can paste into the template below — no more broken local paths!</p>
+      <input type="file" id="img-input" accept="image/*" onchange="uploadImage(this.files[0])" style="display:none">
+      <button class="btn btn-secondary" onclick="document.getElementById('img-input').click()">📁 Upload Image</button>
+      <div id="img-result" style="margin-top:14px;display:none;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Copy this src value into your template:</div>
+        <textarea id="img-uri" readonly style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:11px;font-family:monospace;height:70px;resize:none;"></textarea>
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyImgUri()">Copy</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">✏️ Edit HTML Template</div>
+      <textarea id="template-editor" style="width:100%;height:340px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:monospace;padding:16px;resize:vertical;line-height:1.6;" placeholder="Loading template…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveTemplate()">💾 Save Template</button>
+        <button class="btn btn-secondary" onclick="loadTemplate()">↩ Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SCHEDULER ── -->
+  <div id="page-scheduler" class="page">
+    <div class="page-header">
+      <h1>Scheduler</h1>
+      <p>Set a daily time for automatic birthday emails. No need to run the script manually.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">⏰ Automatic Send</div>
+      <div class="form-group">
+        <label>Auto-send enabled</label>
+        <div class="toggle-row">
+          <div class="toggle" id="auto-toggle" onclick="toggleAutoSend()"></div>
+          <span id="auto-toggle-label" style="font-size:14px;color:var(--muted)">Disabled</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Send time (24-hour)</label>
+          <input type="time" id="send-time" value="08:00">
+        </div>
+        <div class="form-group">
+          <label>Timezone</label>
+          <select id="timezone">
+            <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+            <option value="UTC">UTC</option>
+            <option value="America/New_York">America/New_York (EST)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveSchedule()">Save Schedule</button>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+        <div style="font-size:13px;color:var(--muted);">Next scheduled run</div>
+        <div style="font-size:16px;font-weight:600;color:var(--accent2);margin-top:4px;" id="next-run-label">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div id="page-settings" class="page">
+    <div class="page-header">
+      <h1>Settings</h1>
+      <p>Configure your Gmail SMTP credentials. These are stored locally — never shared.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📧 SMTP / Email Config</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>SMTP Server</label>
+          <input type="text" id="smtp-server" value="smtp.gmail.com">
+        </div>
+        <div class="form-group">
+          <label>SMTP Port</label>
+          <input type="number" id="smtp-port" value="587">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Sender Email</label>
+        <input type="email" id="sender-email" placeholder="yourname@gmail.com">
+      </div>
+      <div class="form-group">
+        <label>Gmail App Password <span style="color:var(--muted);font-size:12px;">(not your login password — <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">generate here</a>)</span></label>
+        <input type="password" id="app-password" placeholder="••••••••••••••••" autocomplete="new-password">
+        <div id="password-set-note" style="font-size:12px;color:var(--green);margin-top:4px;display:none;">✅ App password is set</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOGS ── -->
+  <div id="page-logs" class="page">
+    <div class="page-header">
+      <h1>Activity Logs</h1>
+      <p>Live view of all application events, sends, and errors.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        📜 App Log
+        <button class="btn btn-secondary" style="margin-left:auto;padding:4px 12px;font-size:12px;" onclick="loadLogs()">Refresh</button>
+      </div>
+      <div class="log-viewer" id="log-viewer">Loading logs…</div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ── Navigation ──
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (id === 'dashboard')   loadDashboard();
+  if (id === 'template')    loadTemplate();
+  if (id === 'settings')    loadSettings();
+  if (id === 'scheduler')   loadScheduler();
+  if (id === 'logs')        loadLogs();
+}
+
+// ── Toast ──
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  document.getElementById('dashboard-date').textContent =
+    new Date().toLocaleDateString('en-IN', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  try {
+    const res  = await fetch('/api/matches');
+    const data = await res.json();
+    if (!res.ok) { toast(data.error, 'error'); return; }
+
+    document.getElementById('stat-matches').textContent = data.matches.length;
+    document.getElementById('stat-total').textContent   = data.total_rows;
+    document.getElementById('stat-skipped').textContent = data.skipped.length;
+
+    const tbody = document.getElementById('matches-tbody');
+    if (data.matches.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px;">🎉 No birthdays today</td></tr>';
+    } else {
+      tbody.innerHTML = data.matches.map((m, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td><strong>${m.name}</strong></td>
+          <td>${m.email}</td>
+          <td><span class="badge badge-gray">${m.rollnumber || '—'}</span></td>
+        </tr>`).join('');
+    }
+
+    // Skipped
+    const skippedCard = document.getElementById('skipped-card');
+    if (data.skipped.length > 0) {
+      skippedCard.style.display = '';
+      document.getElementById('skipped-tbody').innerHTML = data.skipped.map(s => `
+        <tr>
+          <td>${s.rownum}</td>
+          <td>${s.name || '—'}</td>
+          <td>${s.email || '—'}</td>
+          <td><span class="badge badge-red">${s.reason}</span></td>
+        </tr>`).join('');
+    } else {
+      skippedCard.style.display = 'none';
+    }
+
+    document.getElementById('btn-send').disabled = data.matches.length === 0;
+  } catch (e) {
+    toast('Failed to load dashboard: ' + e.message, 'error');
+  }
+}
+
+// ── Send emails ──
+async function sendEmails() {
+  if (!confirm('Send birthday emails to all today\'s matches?')) return;
+  const btn = document.getElementById('btn-send');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const prog    = document.getElementById('send-progress');
+  const progBar = document.getElementById('send-progress-bar');
+  const progTxt = document.getElementById('send-progress-text');
+  prog.style.display = '';
+
+  try {
+    const res  = await fetch('/api/send', {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) { toast(data.error, 'error'); btn.disabled = false; btn.textContent = 'Send Birthday Wishes'; return; }
+    toast(data.message, 'info');
+    pollSendStatus(data.total, btn, progBar, progTxt, prog);
+  } catch (e) {
+    toast('Send failed: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Send Birthday Wishes';
+  }
+}
+
+function pollSendStatus(total, btn, bar, txt, wrap) {
+  const iv = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/send/status');
+      const data = await res.json();
+      const pct  = total > 0 ? Math.round((data.progress / total) * 100) : 0;
+      bar.style.width = pct + '%';
+      txt.textContent = `Sending… ${data.progress} / ${total} (${pct}%)`;
+      if (!data.running) {
+        clearInterval(iv);
+        const sent   = (data.results || []).filter(r => r.status === 'sent').length;
+        const failed = (data.results || []).filter(r => r.status === 'failed').length;
+        txt.textContent = `Done — ${sent} sent, ${failed} failed.`;
+        bar.style.width = '100%';
+        btn.disabled = false;
+        btn.textContent = 'Send Birthday Wishes';
+        toast(`✅ ${sent} sent${failed ? ', ❌ ' + failed + ' failed' : ''}`, failed ? 'error' : 'success');
+      }
+    } catch { clearInterval(iv); }
+  }, 1500);
+}
+
+// ── CSV Upload ──
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadCSV(file);
+}
+
+async function uploadCSV(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  toast('Uploading…', 'info');
+  try {
+    const res  = await fetch('/api/csv/upload', {method:'POST', body: fd});
+    const data = await res.json();
+    if (!res.ok) { toast(data.error, 'error'); return; }
+    toast('CSV uploaded! ' + data.validation.valid.length + ' valid rows.', 'success');
+    showValidation(data.validation);
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'error');
+  }
+}
+
+function showValidation(v) {
+  const card = document.getElementById('validation-card');
+  card.style.display = '';
+  document.getElementById('csv-valid-count').textContent = v.valid.length;
+  document.getElementById('csv-error-count').textContent = v.errors.length;
+
+  let html = `<table><thead><tr><th>Row</th><th>Name</th><th>Email</th><th>DOB</th><th>Status</th></tr></thead><tbody>`;
+  v.valid.forEach(r => {
+    html += `<tr><td>${r.rownum}</td><td>${r.name}</td><td>${r.email}</td><td>${r.dob}</td><td><span class="badge badge-green">✓ Valid</span></td></tr>`;
+  });
+  v.errors.forEach(r => {
+    html += `<tr><td>${r.rownum}</td><td>${r.name||'—'}</td><td>${r.email||'—'}</td><td>—</td><td><span class="badge badge-red">${r.reason}</span></td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('csv-preview-wrap').innerHTML = html;
+}
+
+// ── Template ──
+async function loadTemplate() {
+  const res  = await fetch('/api/template');
+  const data = await res.json();
+  document.getElementById('template-editor').value = data.html || '';
+}
+
+async function saveTemplate() {
+  const html = document.getElementById('template-editor').value;
+  const res  = await fetch('/api/template', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({html})
+  });
+  const data = await res.json();
+  toast(res.ok ? data.message : data.error, res.ok ? 'success' : 'error');
+}
+
+async function uploadImage(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const res  = await fetch('/api/template/upload-image', {method:'POST', body: fd});
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('img-uri').value = data.data_uri;
+    document.getElementById('img-result').style.display = '';
+    toast('Image ready — copy the src value below.', 'success');
+  } else {
+    toast(data.error, 'error');
+  }
+}
+
+function copyImgUri() {
+  const el = document.getElementById('img-uri');
+  el.select();
+  document.execCommand('copy');
+  toast('Copied to clipboard!', 'success');
+}
+
+// ── Settings ──
+async function loadSettings() {
+  const res  = await fetch('/api/settings');
+  const data = await res.json();
+  document.getElementById('smtp-server').value  = data.smtp_server || 'smtp.gmail.com';
+  document.getElementById('smtp-port').value    = data.smtp_port   || 587;
+  document.getElementById('sender-email').value = data.sender_email || '';
+  const note = document.getElementById('password-set-note');
+  note.style.display = data.password_set ? '' : 'none';
+}
+
+async function saveSettings() {
+  const payload = {
+    smtp_server:  document.getElementById('smtp-server').value,
+    smtp_port:    parseInt(document.getElementById('smtp-port').value),
+    sender_email: document.getElementById('sender-email').value,
+  };
+  const pw = document.getElementById('app-password').value;
+  if (pw) payload.app_password = pw;
+
+  const res  = await fetch('/api/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  toast(res.ok ? '✅ Settings saved.' : data.error, res.ok ? 'success' : 'error');
+  if (res.ok) loadSettings();
+}
+
+// ── Scheduler ──
+let _autoSend = false;
+async function loadScheduler() {
+  const res  = await fetch('/api/settings');
+  const data = await res.json();
+  document.getElementById('send-time').value = data.send_time || '08:00';
+  document.getElementById('timezone').value  = data.timezone  || 'Asia/Kolkata';
+  _autoSend = !!data.auto_send;
+  updateToggleUI();
+  document.getElementById('next-run-label').textContent = data.next_run || 'Not scheduled';
+}
+
+function toggleAutoSend() {
+  _autoSend = !_autoSend;
+  updateToggleUI();
+}
+
+function updateToggleUI() {
+  const t  = document.getElementById('auto-toggle');
+  const lb = document.getElementById('auto-toggle-label');
+  t.classList.toggle('on', _autoSend);
+  lb.textContent = _autoSend ? 'Enabled — emails will send automatically' : 'Disabled';
+  lb.style.color = _autoSend ? 'var(--green)' : 'var(--muted)';
+}
+
+async function saveSchedule() {
+  const payload = {
+    send_time: document.getElementById('send-time').value,
+    timezone:  document.getElementById('timezone').value,
+    auto_send: _autoSend,
+  };
+  const res  = await fetch('/api/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  toast(res.ok ? '✅ Schedule saved.' : data.error, res.ok ? 'success' : 'error');
+  if (res.ok) document.getElementById('next-run-label').textContent = data.next_run || 'Not scheduled';
+}
+
+// ── Logs ──
+async function loadLogs() {
+  const res  = await fetch('/api/logs?lines=150');
+  const data = await res.json();
+  const viewer = document.getElementById('log-viewer');
+  viewer.innerHTML = (data.lines || []).map(l => {
+    let cls = '';
+    if (l.includes('[SENT]'))   cls = 'log-sent';
+    else if (l.includes('ERROR') || l.includes('[FAIL]')) cls = 'log-err';
+    else if (l.includes('WARNING') || l.includes('[SKIP]')) cls = 'log-warn';
+    else if (l.includes('INFO')) cls = 'log-info';
+    return `<div class="${cls}">${escHtml(l)}</div>`;
+  }).join('') || '<div style="color:var(--muted)">No log entries yet.</div>';
+  viewer.scrollTop = viewer.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ──
+loadDashboard();
+</script>
+</body>
+</html>
