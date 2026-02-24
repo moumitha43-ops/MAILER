@@ -1,3 +1,4 @@
+import os
 import shutil
 import smtplib
 import time
@@ -130,12 +131,16 @@ def send_all(matches: list, template_html: str = None,
     if not matches:
         return {"sent": [], "failed": [], "skipped": [], "total": 0}
 
-    config = load_config()
-    smtp_server  = config["smtp_server"]
-    smtp_port    = int(config["smtp_port"])
-    sender_email = config["sender_email"]
-    app_password = config["app_password"]
+    smtp_server  = os.getenv("SMTP_SERVER", "smtp.elasticemail.com")
+    smtp_port    = int(os.getenv("SMTP_PORT", "2525"))
+    sender_email = os.getenv("SMTP_FROM")          # verified sender
+    smtp_user    = os.getenv("SMTP_USERNAME")      # Elastic login email
+    app_password    = os.getenv("SMTP_PASSWORD") 
+    
+    if not all([smtp_server, smtp_port, sender_email, smtp_user, smtp_pass]):
+     raise ValueError("SMTP environment variables are missing in Railway.")
 
+     # API KEY
     if not sender_email or not app_password:
         raise ValueError("SMTP credentials are not configured. Go to Settings to add them.")
 
@@ -153,7 +158,7 @@ def send_all(matches: list, template_html: str = None,
             smtp.ehlo()
             smtp.starttls()
             smtp.ehlo()
-            smtp.login(sender_email, app_password)
+            smtp.login(smtp_user, app_password)
             logger.info(f"SMTP connected as {sender_email}")
 
             for i, match in enumerate(matches, start=1):
