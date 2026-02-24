@@ -1,0 +1,5 @@
+flask>=3.0
+playwright>=1.40
+apscheduler>=3.10
+python-dotenv>=1.0
+werkzeug>=3.0
