@@ -117,17 +117,30 @@ def _build_email(sender: str, name: str, to_email: str, image_path: Path) -> Ema
 def _get_gmail_service():
     creds = None
 
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # Load from Railway environment variables
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    token_json = os.environ.get("GOOGLE_TOKEN_JSON")
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            raise RuntimeError("token.json missing or invalid")
+    if not creds_json or not token_json:
+        raise RuntimeError(
+            "Google OAuth environment variables are missing"
+        )
+
+    token_data = json.loads(token_json)
+
+    creds = Credentials(
+        token=token_data.get("token"),
+        refresh_token=token_data.get("refresh_token"),
+        token_uri=token_data.get("token_uri"),
+        client_id=token_data.get("client_id"),
+        client_secret=token_data.get("client_secret"),
+        scopes=SCOPES,
+    )
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
 
     return build("gmail", "v1", credentials=creds)
-
 
 def _send_via_gmail_api(msg: EmailMessage):
     service = _get_gmail_service()
@@ -213,5 +226,6 @@ def send_all(matches: list, template_html: str = None,
         f"Run complete — {len(results.get('sent', []))} sent, "
         f"{len(results.get('failed', []))} failed."
     )
+
 
     return results
