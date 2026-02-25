@@ -16,7 +16,7 @@ from helpers import (
 # ==============================
 #ELASTIC_API_KEY = "06B62CE07959B5E168189BBC91EF3F53EB5DBFBD163351BDA41A5B29ABF00EB7687954E3D619BC74687D642E7F450966"  # your API key
 ELASTIC_API_KEY = os.environ.get("ELASTIC_API_KEY")
-ELASTIC_FROM    = "wmoumitha2007@gmail.com"     # verified sender email
+ELASTIC_FROM = os.environ.get("ELASTIC_FROM")    # verified sender email
 ELASTIC_API_URL = "https://api.elasticemail.com/v4/emails"
 
 
