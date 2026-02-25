@@ -1,19 +1,36 @@
 import os
-import shutil
-import smtplib
 import time
+import base64
+import shutil
+import requests
 from pathlib import Path
 from datetime import date
-from email.message import EmailMessage
-from email.utils import make_msgid
 
 from helpers import (
     OUTPUT_DIR, safe_filename, load_config, logger,
     LOG_DIR
 )
 
+# ==============================
+# ElasticEmail API CONFIG
+# ==============================
+#ELASTIC_API_KEY = "06B62CE07959B5E168189BBC91EF3F53EB5DBFBD163351BDA41A5B29ABF00EB7687954E3D619BC74687D642E7F450966"  # your API key
+ELASTIC_API_KEY = os.environ.get("ELASTIC_API_KEY")
+ELASTIC_FROM    = "wmoumitha2007@gmail.com"     # verified sender email
+ELASTIC_API_URL = "https://api.elasticemail.com/v4/emails"
+
+
+from helpers import logger
+import os
+
+
 SENT_LOG = LOG_DIR / "sent_today.log"
 
+# Ensure OUTPUT_DIR exists
+if not OUTPUT_DIR.exists():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# ==============================
 def _already_sent_today(email: str) -> bool:
     today = date.today().isoformat()
     if not SENT_LOG.exists():
@@ -25,14 +42,17 @@ def _already_sent_today(email: str) -> bool:
                 return True
     return False
 
+
 def _mark_sent_today(email: str):
     today = date.today().isoformat()
     with open(SENT_LOG, "a") as f:
         f.write(f"{today}|{email}\n")
 
 
+# ==============================
+# PLAYWRIGHT CARD RENDER
+# ==============================
 def _render_card(name: str, rollnumber: str, template_html: str) -> tuple[Path, Path]:
-    
     from playwright.sync_api import sync_playwright, Error as PWError
 
     fname      = safe_filename(rollnumber or name)
@@ -44,8 +64,8 @@ def _render_card(name: str, rollnumber: str, template_html: str) -> tuple[Path, 
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch()
-            ctx     = browser.new_context(
+            browser = p.chromium.launch(headless=True)  # headless for servers
+            ctx = browser.new_context(
                 viewport={"width": 1000, "height": 600},
                 device_scale_factor=2,
             )
@@ -61,61 +81,104 @@ def _render_card(name: str, rollnumber: str, template_html: str) -> tuple[Path, 
     return html_path, image_path
 
 
-def _build_email(sender: str, name: str, to_email: str, image_path: Path) -> EmailMessage:
-    cid = make_msgid()
-    msg = EmailMessage()
-    msg["From"]    = sender
-    msg["To"]      = to_email
-    msg["Subject"] = f"Happy Birthday {name} 🎉"
-
-    msg.set_content(f"Happy Birthday {name}!\nWishing you a wonderful day.")
-
-    msg.add_alternative(
-        f"""<html>
-          <body style="margin:0;text-align:center;background:#f2f2f2;padding:20px;">
-            <img src="cid:{cid[1:-1]}" style="max-width:100%;height:auto;border-radius:12px;">
-          </body>
-        </html>""",
-        subtype="html",
-    )
-
+# ==============================
+# IMAGE → BASE64
+# ==============================
+def _image_to_base64(image_path: Path) -> str:
     with open(image_path, "rb") as img:
-        msg.get_payload()[1].add_related(
-            img.read(), maintype="image", subtype="png", cid=cid,filename=f"Birthday_Card.png"
-        )
-    return msg
+        return base64.b64encode(img.read()).decode()
 
 
-def _send_one(smtp: smtplib.SMTP, sender: str, match: dict,
-              template_html: str, max_retries: int = 3) -> dict:
-    
+# ==============================
+# HTML BUILDER
+# ==============================
+def _build_html(name: str, image_b64: str) -> str:
+    return f"""
+    <html>
+      <body style="margin:0;text-align:center;background:#f2f2f2;padding:20px;">
+        <img
+          src="data:image/png;base64,{image_b64}"
+          style="max-width:100%;height:auto;border-radius:12px;"
+        >
+      </body>
+    </html>
+    """
+
+
+# ==============================
+# SEND VIA ELASTICEMAIL API
+# ==============================
+def _send_via_elastic_api(name: str, to_email: str, html: str):
+    if not ELASTIC_API_KEY or not ELASTIC_FROM:
+        raise ValueError("ElasticEmail API key or FROM email missing")
+
+    payload = {
+        "Recipients": {
+            "To": [to_email]
+        },
+        "Content": {
+            "From": {
+                "Email": ELASTIC_FROM,
+                "Name": "Birthday Bot"
+            },
+            "Subject": f"Happy Birthday {name} 🎉",
+            "Body": [
+                {
+                    "ContentType": "PlainText",
+                    "Content": f"Happy Birthday {name}! 🎉\n\nWishing you a wonderful day!"
+                },
+                {
+                    "ContentType": "HTML",
+                    "Content": html
+                }
+            ]
+        }
+    }
+
+    headers = {
+        "X-ElasticEmail-ApiKey": ELASTIC_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    r = requests.post(
+        "https://api.elasticemail.com/v4/emails",
+        json=payload,
+        headers=headers,
+        timeout=20
+    )
+    logger.error(f"ElasticEmail response: {r.status_code} {r.text}")
+
+    if r.status_code not in (200, 201, 202):
+        raise RuntimeError(f"{r.status_code} | {r.text}")
+# ==============================
+# SINGLE SEND
+# ==============================
+def _send_one(match: dict, template_html: str, max_retries: int = 3) -> dict:
     name       = match["name"]
     email      = match["email"]
-    rollnumber = match["rollnumber"]
-
-    # Duplicate guard
+    rollnumber = match.get("rollnumber", "")
     """
+    # Skip duplicate sends for today
     if _already_sent_today(email):
         logger.info(f"[SKIP-DUP] {name} <{email}> already sent today.")
         return {"name": name, "email": email, "status": "skipped_duplicate", "error": ""}
     """
-    # Render card
     try:
         _, image_path = _render_card(name, rollnumber, template_html)
+        image_b64 = _image_to_base64(image_path)
+        html = _build_html(name, image_b64)
     except Exception as e:
         logger.error(f"[RENDER-FAIL] {name}: {e}")
         return {"name": name, "email": email, "status": "failed", "error": str(e)}
 
-    # Send with retries
-    msg = _build_email(sender, name, email, image_path)
     last_error = ""
     for attempt in range(1, max_retries + 1):
         try:
-            smtp.send_message(msg)
+            _send_via_elastic_api(name, email, html)
             _mark_sent_today(email)
             logger.info(f"[SENT] {name} <{email}> (attempt {attempt})")
             return {"name": name, "email": email, "status": "sent", "error": ""}
-        except smtplib.SMTPException as e:
+        except Exception as e:
             last_error = str(e)
             logger.warning(f"[RETRY {attempt}/{max_retries}] {name}: {e}")
             time.sleep(2 ** attempt)
@@ -124,27 +187,14 @@ def _send_one(smtp: smtplib.SMTP, sender: str, match: dict,
     return {"name": name, "email": email, "status": "failed", "error": last_error}
 
 
+# ==============================
+# SEND ALL
+# ==============================
+def send_all(matches: list, template_html: str = None, progress_callback=None) -> dict:
 
-def send_all(matches: list, template_html: str = None,
-             progress_callback=None) -> dict:
-   
     if not matches:
         return {"sent": [], "failed": [], "skipped": [], "total": 0}
 
-    smtp_server  = os.getenv("SMTP_SERVER", "smtp.elasticemail.com")
-    smtp_port    = int(os.getenv("SMTP_PORT", "2525"))
-    sender_email = os.getenv("SMTP_FROM")          # verified sender
-    smtp_user    = os.getenv("SMTP_USERNAME")      # Elastic login email
-    app_password    = os.getenv("SMTP_PASSWORD") 
-    
-    if not all([smtp_server, smtp_port, sender_email, smtp_user, app_password]):
-     raise ValueError("SMTP environment variables are missing in Railway.")
-
-     # API KEY
-    if not sender_email or not app_password:
-        raise ValueError("SMTP credentials are not configured. Go to Settings to add them.")
-
-    # Load template
     if template_html is None:
         template_path = Path("template.html")
         if not template_path.exists():
@@ -153,40 +203,22 @@ def send_all(matches: list, template_html: str = None,
 
     results = {"sent": [], "failed": [], "skipped": [], "total": len(matches)}
 
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(smtp_user, app_password)
-            logger.info(f"SMTP connected as {sender_email}")
+    for i, match in enumerate(matches, start=1):
+        result = _send_one(match, template_html)
+        status = result["status"]
+        # Normalize skipped status key
+        if status == "skipped_duplicate":
+            status = "skipped"
+        results.setdefault(status, []).append(result)
 
-            for i, match in enumerate(matches, start=1):
-                result = _send_one(smtp, sender_email, match, template_html)
-                status = result["status"]
-                results.setdefault(status, []).append(result)
-                if status not in results:
-                    results["failed"].append(result)
+        if progress_callback:
+            progress_callback(i, len(matches), result)
 
-                if progress_callback:
-                    progress_callback(i, len(matches), result)
-
-    except smtplib.SMTPAuthenticationError:
-        raise ValueError("SMTP authentication failed. Check your email and App Password in Settings.")
-    except smtplib.SMTPConnectError as e:
-        raise ConnectionError(f"Could not connect to SMTP server {smtp_server}:{smtp_port} — {e}")
-    except Exception as e:
-        logger.error(f"Unexpected SMTP error: {e}")
-        raise
-    finally:
-        
-        if OUTPUT_DIR.exists():
-            #shutil.rmtree(OUTPUT_DIR)
-            OUTPUT_DIR.mkdir(exist_ok=True)
-
-    sent_n    = len(results.get("sent", []))
-    failed_n  = len(results.get("failed", []))
-    skipped_n = len(results.get("skipped_duplicate", []))
-    logger.info(f"Run complete — {sent_n} sent, {failed_n} failed, {skipped_n} skipped.")
+    logger.info(
+        f"Run complete — "
+        f"{len(results.get('sent', []))} sent, "
+        f"{len(results.get('failed', []))} failed, "
+        f"{len(results.get('skipped', []))} skipped."
+    )
 
     return results
