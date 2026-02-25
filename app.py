@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 
 from helpers import load_config, save_config, logger, UPLOAD_DIR, LOG_DIR
 from matcher import get_matches, validate_csv
-from sender import send_all
+from sendapi import send_all
 from scheduler import start_scheduler, update_schedule, get_next_run
 
 # ──────────────────────────────────────────────────────────────────────────────
