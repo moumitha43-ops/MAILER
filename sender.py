@@ -131,8 +131,8 @@ def send_all(matches: list, template_html: str = None,
     if not matches:
         return {"sent": [], "failed": [], "skipped": [], "total": 0}
 
-    smtp_server  = os.getenv("SMTP_SERVER", "smtp.elasticemail.com")
-    smtp_port    = int(os.getenv("SMTP_PORT", "2525"))
+    smtp_server  = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port    = int(os.getenv("SMTP_PORT", "587"))
     sender_email = os.getenv("SMTP_FROM")          # verified sender
     smtp_user    = os.getenv("SMTP_USERNAME")      # Elastic login email
     app_password    = os.getenv("SMTP_PASSWORD") 
