@@ -128,34 +128,26 @@ TOKEN_FILE = "token.pkl"
 
 
 def _get_gmail_service():
-    creds = None
+    token_json = os.getenv("GOOGLE_TOKEN_JSON")
 
-    # Load token.pkl
-    if os.path.exists(TOKEN_FILE):
-        try:
-            import pickle
-            with open(TOKEN_FILE, "rb") as f:
-                creds = pickle.load(f)
-        except Exception:
-            creds = None
+    if not token_json:
+        raise RuntimeError("GOOGLE_TOKEN_JSON not set")
 
-    # Refresh if expired
-    if creds and creds.expired and creds.refresh_token:
-        try:
-            creds.refresh(Request())
-            with open(TOKEN_FILE, "wb") as f:
-                import pickle
-                pickle.dump(creds, f)
-        except Exception as e:
-            raise RuntimeError(f"Token refresh failed: {e}")
+    token_data = json.loads(token_json)
 
-    if not creds:
-        raise RuntimeError(
-            "Missing token.pkl. Generate locally and upload."
-        )
+    creds = Credentials(
+        token=token_data["token"],
+        refresh_token=token_data.get("refresh_token"),
+        token_uri=token_data["token_uri"],
+        client_id=token_data["client_id"],
+        client_secret=token_data["client_secret"],
+        scopes=SCOPES,
+    )
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
 
     return build("gmail", "v1", credentials=creds)
-
 
 def _send_via_gmail_api(msg: EmailMessage):
     try:
