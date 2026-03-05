@@ -1,3 +1,4 @@
+token.pkl
 __pycache__/
 *.pyc
 .env
@@ -6,3 +7,4 @@ uploads/
 credentials.json
 token.json
 output/
+
