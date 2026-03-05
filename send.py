@@ -34,6 +34,7 @@ def _already_sent_today(email: str) -> bool:
     today = date.today().isoformat()
     if not SENT_LOG.exists():
         return False
+
     with open(SENT_LOG) as f:
         for line in f:
             parts = line.strip().split("|")
@@ -97,7 +98,8 @@ def _build_email(sender: str, name: str, to_email: str, image_path: Path) -> Ema
         f"""
         <html>
           <body style="margin:0;text-align:center;background:#f2f2f2;padding:20px;">
-            <img src="cid:{cid[1:-1]}" style="max-width:100%;height:auto;border-radius:12px;">
+            <img src="cid:{cid[1:-1]}" 
+                 style="max-width:100%;height:auto;border-radius:12px;">
           </body>
         </html>
         """,
@@ -117,23 +119,20 @@ def _build_email(sender: str, name: str, to_email: str, image_path: Path) -> Ema
 
 
 # ==============================
-# GMAIL API AUTH (ENV BASED)
+# GMAIL API AUTH (ENV SAFE)
 # ==============================
-# ==============================
-# GMAIL API AUTH (token.pkl BASED)
-# ==============================
-
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
-TOKEN_FILE = "token.pkl"
-
-
 def _get_gmail_service():
     token_json = os.getenv("GOOGLE_TOKEN_JSON")
 
     if not token_json:
-        raise RuntimeError("GOOGLE_TOKEN_JSON not set")
+        raise RuntimeError(
+            "GOOGLE_TOKEN_JSON environment variable not set"
+        )
 
-    token_data = json.loads(token_json)
+    try:
+        token_data = json.loads(token_json)
+    except json.JSONDecodeError:
+        raise RuntimeError("Invalid GOOGLE_TOKEN_JSON format")
 
     creds = Credentials(
         token=token_data["token"],
@@ -144,27 +143,25 @@ def _get_gmail_service():
         scopes=SCOPES,
     )
 
+    # Auto refresh if expired
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
 
     return build("gmail", "v1", credentials=creds)
 
+
 def _send_via_gmail_api(msg: EmailMessage):
-    try:
-        service = _get_gmail_service()
-        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    service = _get_gmail_service()
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-        result = service.users().messages().send(
-            userId="me",
-            body={"raw": raw}
-        ).execute()
+    result = service.users().messages().send(
+        userId="me",
+        body={"raw": raw}
+    ).execute()
 
-        logger.info(f"Gmail sent. ID: {result.get('id')}")
-        return True
+    logger.info(f"Gmail sent. ID: {result.get('id')}")
+    return True
 
-    except Exception as e:
-        logger.error(f"Gmail send failed: {e}")
-        raise
 
 # ==============================
 # SEND ONE EMAIL
@@ -175,6 +172,10 @@ def _send_one(sender: str, match: dict,
     name = match["name"]
     email = match["email"]
     rollnumber = match["rollnumber"]
+
+    #if _already_sent_today(email):
+     #   logger.info(f"[SKIPPED] Already sent today: {email}")
+      #  return {"name": name, "email": email, "status": "skipped", "error": ""}
 
     try:
         _, image_path = _render_card(name, rollnumber, template_html)
@@ -234,7 +235,8 @@ def send_all(matches: list, template_html: str = None,
 
     logger.info(
         f"Run complete — {len(results.get('sent', []))} sent, "
-        f"{len(results.get('failed', []))} failed."
+        f"{len(results.get('failed', []))} failed, "
+        f"{len(results.get('skipped', []))} skipped."
     )
 
     return results
