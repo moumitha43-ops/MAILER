@@ -14,12 +14,16 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from helpers import OUTPUT_DIR, safe_filename, load_config, logger, LOG_DIR
+from helpers import (
+    OUTPUT_DIR, safe_filename, load_config, logger,
+    LOG_DIR
+)
 
 # ==============================
-# CONFIG
+# GMAIL API CONFIG
 # ==============================
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+
 SENT_LOG = LOG_DIR / "sent_today.log"
 
 
@@ -28,30 +32,27 @@ SENT_LOG = LOG_DIR / "sent_today.log"
 # ==============================
 def _already_sent_today(email: str) -> bool:
     today = date.today().isoformat()
-
     if not SENT_LOG.exists():
         return False
-
     with open(SENT_LOG) as f:
         for line in f:
-            d, e = line.strip().split("|")
-            if d == today and e == email:
+            parts = line.strip().split("|")
+            if len(parts) == 2 and parts[0] == today and parts[1] == email:
                 return True
     return False
 
 
 def _mark_sent_today(email: str):
     today = date.today().isoformat()
-    LOG_DIR.mkdir(exist_ok=True)
     with open(SENT_LOG, "a") as f:
         f.write(f"{today}|{email}\n")
 
 
 # ==============================
-# CARD RENDER
+# CARD RENDERING
 # ==============================
-def _render_card(name: str, rollnumber: str, template_html: str):
-    from playwright.sync_api import sync_playwright
+def _render_card(name: str, rollnumber: str, template_html: str) -> tuple[Path, Path]:
+    from playwright.sync_api import sync_playwright, Error as PWError
 
     fname = safe_filename(rollnumber or name)
     html_path = OUTPUT_DIR / f"{fname}.html"
@@ -60,25 +61,29 @@ def _render_card(name: str, rollnumber: str, template_html: str):
     personalised = template_html.replace("{{name}}", name)
     html_path.write_text(personalised, encoding="utf-8")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        ctx = browser.new_context(
-            viewport={"width": 1000, "height": 600},
-            device_scale_factor=2,
-        )
-        page = ctx.new_page()
-        page.goto(html_path.absolute().as_uri())
-        page.wait_for_timeout(400)
-        page.screenshot(path=str(image_path), full_page=True)
-        browser.close()
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            ctx = browser.new_context(
+                viewport={"width": 1000, "height": 600},
+                device_scale_factor=2,
+            )
+            page = ctx.new_page()
+            page.goto(html_path.absolute().as_uri(), wait_until="networkidle")
+            page.wait_for_timeout(400)
+            page.screenshot(path=str(image_path), full_page=True)
+            page.close()
+            browser.close()
+    except PWError as e:
+        raise RuntimeError(f"Playwright error for '{name}': {e}")
 
-    return image_path
+    return html_path, image_path
 
 
 # ==============================
 # EMAIL BUILD
 # ==============================
-def _build_email(sender: str, name: str, to_email: str, image_path: Path):
+def _build_email(sender: str, name: str, to_email: str, image_path: Path) -> EmailMessage:
     cid = make_msgid()
 
     msg = EmailMessage()
@@ -86,14 +91,13 @@ def _build_email(sender: str, name: str, to_email: str, image_path: Path):
     msg["To"] = to_email
     msg["Subject"] = f"Happy Birthday {name} 🎉"
 
-    msg.set_content(f"Happy Birthday {name}!")
+    msg.set_content(f"Happy Birthday {name}!\nWishing you a wonderful day.")
 
     msg.add_alternative(
         f"""
         <html>
-          <body style="text-align:center;background:#f2f2f2;padding:20px;">
-            <img src="cid:{cid[1:-1]}" 
-                 style="max-width:100%;border-radius:12px;">
+          <body style="margin:0;text-align:center;background:#f2f2f2;padding:20px;">
+            <img src="cid:{cid[1:-1]}" style="max-width:100%;height:auto;border-radius:12px;">
           </body>
         </html>
         """,
@@ -113,75 +117,132 @@ def _build_email(sender: str, name: str, to_email: str, image_path: Path):
 
 
 # ==============================
-# GMAIL AUTH (ENV BASED)
+# GMAIL API AUTH (ENV BASED)
 # ==============================
+# ==============================
+# GMAIL API AUTH (token.pkl BASED)
+# ==============================
+
+SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+TOKEN_FILE = "token.pkl"
+
+
 def _get_gmail_service():
-    token_json = os.getenv("GOOGLE_TOKEN_JSON")
+    creds = None
 
-    if not token_json:
-        raise RuntimeError("GOOGLE_TOKEN_JSON env variable missing")
+    # Load token.pkl
+    if os.path.exists(TOKEN_FILE):
+        try:
+            import pickle
+            with open(TOKEN_FILE, "rb") as f:
+                creds = pickle.load(f)
+        except Exception:
+            creds = None
 
-    token_data = json.loads(token_json)
+    # Refresh if expired
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            with open(TOKEN_FILE, "wb") as f:
+                import pickle
+                pickle.dump(creds, f)
+        except Exception as e:
+            raise RuntimeError(f"Token refresh failed: {e}")
 
-    creds = Credentials(
-        token=token_data["token"],
-        refresh_token=token_data["refresh_token"],
-        token_uri=token_data["token_uri"],
-        client_id=token_data["client_id"],
-        client_secret=token_data["client_secret"],
-        scopes=SCOPES,
-    )
-
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+    if not creds:
+        raise RuntimeError(
+            "Missing token.pkl. Generate locally and upload."
+        )
 
     return build("gmail", "v1", credentials=creds)
 
 
 def _send_via_gmail_api(msg: EmailMessage):
-    service = _get_gmail_service()
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    try:
+        service = _get_gmail_service()
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-    service.users().messages().send(
-        userId="me",
-        body={"raw": raw}
-    ).execute()
+        result = service.users().messages().send(
+            userId="me",
+            body={"raw": raw}
+        ).execute()
 
+        logger.info(f"Gmail sent. ID: {result.get('id')}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Gmail send failed: {e}")
+        raise
 
 # ==============================
-# SEND ONE
+# SEND ONE EMAIL
 # ==============================
-def _send_one(sender: str, person: dict, template_html: str):
-    name = person["name"]
-    email = person["email"]
-    rollnumber = person.get("rollnumber", "")
+def _send_one(sender: str, match: dict,
+              template_html: str, max_retries: int = 3) -> dict:
 
-    if _already_sent_today(email):
-        return {"name": name, "status": "skipped"}
+    name = match["name"]
+    email = match["email"]
+    rollnumber = match["rollnumber"]
 
     try:
-        image_path = _render_card(name, rollnumber, template_html)
-        msg = _build_email(sender, name, email, image_path)
-        _send_via_gmail_api(msg)
-        _mark_sent_today(email)
-        return {"name": name, "status": "sent"}
+        _, image_path = _render_card(name, rollnumber, template_html)
     except Exception as e:
-        return {"name": name, "status": "failed", "error": str(e)}
+        logger.error(f"[RENDER-FAIL] {name}: {e}")
+        return {"name": name, "email": email, "status": "failed", "error": str(e)}
+
+    msg = _build_email(sender, name, email, image_path)
+
+    last_error = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            _send_via_gmail_api(msg)
+            _mark_sent_today(email)
+            logger.info(f"[SENT] {name} <{email}> (attempt {attempt})")
+            return {"name": name, "email": email, "status": "sent", "error": ""}
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"[RETRY {attempt}/{max_retries}] {name}: {e}")
+            time.sleep(2 ** attempt)
+
+    logger.error(f"[FAIL] {name} <{email}> after {max_retries} attempts")
+    return {"name": name, "email": email, "status": "failed", "error": last_error}
 
 
 # ==============================
 # SEND ALL
 # ==============================
-def send_all(matches: list):
+def send_all(matches: list, template_html: str = None,
+             progress_callback=None) -> dict:
+
+    if not matches:
+        return {"sent": [], "failed": [], "skipped": [], "total": 0}
+
     config = load_config()
     sender_email = config.get("sender_email")
 
-    template_html = Path("template.html").read_text(encoding="utf-8")
+    if not sender_email:
+        raise ValueError("Sender email not configured")
 
-    results = []
+    if template_html is None:
+        template_path = Path("template.html")
+        if not template_path.exists():
+            raise FileNotFoundError("template.html not found.")
+        template_html = template_path.read_text(encoding="utf-8")
 
-    for person in matches:
-        result = _send_one(sender_email, person, template_html)
-        results.append(result)
+    results = {"sent": [], "failed": [], "skipped": [], "total": len(matches)}
+
+    for i, match in enumerate(matches, start=1):
+        result = _send_one(sender_email, match, template_html)
+        results.setdefault(result["status"], []).append(result)
+
+        if progress_callback:
+            progress_callback(i, len(matches), result)
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    logger.info(
+        f"Run complete — {len(results.get('sent', []))} sent, "
+        f"{len(results.get('failed', []))} failed."
+    )
 
     return results
